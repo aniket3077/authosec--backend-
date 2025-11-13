@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
 import { handleCors } from '@/lib/cors';
 import { verifyFirebaseToken } from '@/lib/firebase-auth';
@@ -37,7 +37,8 @@ export async function GET(request: NextRequest) {
       return apiError('User not found in database. Please sync your account.', 404, request);
     }
 
-    return apiResponse({ profile }, 200, request);
+    // Return profile directly in data field (not nested)
+    return apiResponse(profile, 200, request);
   } catch (error: any) {
     console.error('Get profile error:', error);
     return apiError(error.message || 'Failed to fetch profile', 500, request);
