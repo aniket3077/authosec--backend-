@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         companyId: receiver.companyId,
         title: 'New Transaction Request',
         message: `You have a new transaction request for ${currency} ${amount}`,
-        type: 'TRANSACTION_INITIATED',
+        type: 'TRANSACTION',
         priority: 'HIGH',
         actionUrl: `/transactions/${transaction.id}`,
       },

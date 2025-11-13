@@ -1,11 +1,11 @@
-import { clerkClient } from '@clerk/nextjs/server';
-import { auth, currentUser } from '@clerk/nextjs/server';
+// This file is deprecated - use firebase-auth.ts instead
+// Keeping as stub to prevent import errors during migration
 import { prisma } from './prisma';
 import { UserRole } from '@prisma/client';
 
 /**
- * Clerk Authentication Service
- * Handles Clerk authentication and user synchronization with database
+ * DEPRECATED: Use firebase-auth.ts instead
+ * This file is kept for backward compatibility during migration
  */
 
 export interface ClerkUserData {

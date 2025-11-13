@@ -84,8 +84,8 @@ export async function POST(request: NextRequest) {
         companyId: transaction.companyId,
         title: 'QR Code Scanned',
         message: `${user.firstName || 'Receiver'} has scanned your QR code`,
-        type: 'transaction',
-        priority: 'normal',
+        type: 'TRANSACTION',
+        priority: 'NORMAL',
         actionUrl: `/transactions/${transaction.id}`,
       },
     });

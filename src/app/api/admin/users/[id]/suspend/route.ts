@@ -61,7 +61,7 @@ export async function POST(
         userId: id,
         title: 'Account Suspended',
         message: 'Your account has been suspended. Please contact support.',
-        type: 'SECURITY_ALERT',
+        type: 'SECURITY',
         priority: 'URGENT',
       },
     });

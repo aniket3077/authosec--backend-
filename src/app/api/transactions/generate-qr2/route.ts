@@ -94,8 +94,8 @@ export async function POST(request: NextRequest) {
         companyId: transaction.companyId,
         title: 'QR2 Generated',
         message: 'Scan the QR2 code to continue',
-        type: 'transaction',
-        priority: 'high',
+        type: 'TRANSACTION',
+        priority: 'HIGH',
         actionUrl: `/transactions/${transaction.id}`,
       },
     });

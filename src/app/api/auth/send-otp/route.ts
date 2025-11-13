@@ -1,16 +1,10 @@
 import { NextRequest } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
-import { supabaseAdmin } from '@/lib/supabase';
 import { handleCors } from '@/lib/cors';
 import { z } from 'zod';
 
 const sendOTPSchema = z.object({
   phone: z.string().regex(/^\+[1-9]\d{1,14}$/, 'Invalid phone number format')
-});
-
-const verifyOTPSchema = z.object({
-  phone: z.string().regex(/^\+[1-9]\d{1,14}$/, 'Invalid phone number format'),
-  token: z.string().length(6, 'OTP must be 6 digits')
 });
 
 // POST /api/auth/send-otp
@@ -20,32 +14,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { phone } = sendOTPSchema.parse(body);
+    sendOTPSchema.parse(body);
 
-    // Send OTP via Supabase Auth
-    const { data, error } = await supabaseAdmin.auth.signInWithOtp({
-      phone,
-      options: {
-        channel: 'sms'
-      }
-    });
-
-    if (error) {
-      return apiError(error.message, 400, request);
-    }
-
-    // Log in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`🔐 OTP sent to ${phone}`);
-    }
-
-    return apiResponse(
-      {
-        message: 'OTP sent successfully',
-        phone,
-        expiresIn: 300 // 5 minutes
-      },
-      200,
+    return apiError(
+      'Phone-based authentication is managed directly by Clerk. Use the Clerk SDK from the client to request verification codes.',
+      501,
       request
     );
   } catch (error: any) {
@@ -53,7 +26,7 @@ export async function POST(request: NextRequest) {
       return apiError('Validation error', 400, request, error.errors);
     }
     console.error('Send OTP error:', error);
-    return apiError(error.message || 'Failed to send OTP', 500, request);
+    return apiError(error.message || 'Failed to process OTP request', 500, request);
   }
 }
 

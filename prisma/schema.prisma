@@ -11,7 +11,7 @@ datasource db {
 model User {
   id                   String         @id @default(uuid())
   email                String?
-  clerkId              String         @unique @map("clerk_id")
+  firebaseUid          String         @unique @map("firebase_uid")
   companyId            String?        @map("company_id")
   createdAt            DateTime       @default(now()) @map("created_at")
   firstName            String?        @map("first_name")
@@ -29,7 +29,7 @@ model User {
   sentTransactions     Transaction[]  @relation("SenderTransactions")
   company              Company?       @relation(fields: [companyId], references: [id])
 
-  @@index([clerkId])
+  @@index([firebaseUid])
   @@index([phone])
   @@index([companyId])
   @@index([role])
@@ -38,7 +38,7 @@ model User {
 
 model Company {
   id                    String           @id @default(uuid())
-  clerkOrgId            String?          @unique @map("clerk_org_id")
+  firebaseOrgId         String?          @unique @map("firebase_org_id")
   name                  String
   email                 String           @unique
   phone                 String

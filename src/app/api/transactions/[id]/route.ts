@@ -132,8 +132,8 @@ export async function PATCH(
             companyId: transaction.companyId,
             title: 'Transaction Cancelled',
             message: `Transaction ${transaction.transactionNumber} has been cancelled`,
-            type: 'transaction',
-            priority: 'normal',
+            type: 'TRANSACTION',
+            priority: 'NORMAL',
           },
         });
       }

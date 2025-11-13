@@ -64,19 +64,6 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        receiver: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-            company: {
-              select: {
-                id: true,
-                name: true,
-          },
-        },
       },
       orderBy: { createdAt: 'desc' },
       skip,
