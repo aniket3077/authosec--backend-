@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { handleCors } from '@/lib/cors';
 import { apiResponse, apiError } from '@/lib/response';
 import prisma from '@/lib/prisma';
