@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
 import { handleCors } from '@/lib/cors';
-import { ClerkService } from '@/lib/clerk';
+import { verifyFirebaseToken, getUserByFirebaseUid, isSuperAdmin } from '@/lib/firebase-auth';
 import { prisma } from '@/lib/prisma';
 
 // POST /api/admin/users/[id]/suspend

@@ -31,5 +31,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return handleCors(request);
+  const corsResponse = handleCors(request); return corsResponse || new NextResponse(null, { status: 204 });
 }

@@ -15,7 +15,7 @@ export function corsHeaders(origin?: string) {
   };
 }
 
-export function handleCors(request: NextRequest) {
+export function handleCors(request: NextRequest): NextResponse | null {
   const origin = request.headers.get('origin') || '';
   
   if (request.method === 'OPTIONS') {

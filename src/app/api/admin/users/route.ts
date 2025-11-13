@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
 import { handleCors } from '@/lib/cors';
-import { ClerkService } from '@/lib/clerk';
+import { verifyFirebaseToken, getUserByFirebaseUid, isSuperAdmin } from '@/lib/firebase-auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/admin/users
@@ -75,5 +75,5 @@ export async function GET(request: NextRequest) {
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return handleCors(request);
+  const corsResponse = handleCors(request); return corsResponse || new NextResponse(null, { status: 204 });
 }

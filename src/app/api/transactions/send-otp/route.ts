@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
 import { handleCors } from '@/lib/cors';
-import { ClerkService } from '@/lib/clerk';
+import { verifyFirebaseToken, getUserByFirebaseUid } from '@/lib/firebase-auth';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { OTPService } from '@/lib/otp';
@@ -91,5 +91,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return handleCors(request);
+  const corsResponse = handleCors(request); return corsResponse || new NextResponse(null, { status: 204 });
 }

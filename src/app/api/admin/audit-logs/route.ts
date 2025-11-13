@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { apiResponse, apiError } from '@/lib/response';
 import { handleCors } from '@/lib/cors';
-import { ClerkService } from '@/lib/clerk';
+import { verifyFirebaseToken, getUserByFirebaseUid, isSuperAdmin } from '@/lib/firebase-auth';
 import { prisma } from '@/lib/prisma';
 
 // GET /api/admin/audit-logs
@@ -10,13 +10,22 @@ export async function GET(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
-    if (!user) {
+    // Verify Firebase token
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
       return apiError('Unauthorized', 401, request);
     }
 
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
+    if (!user) {
+      return apiError('User not found', 404, request);
+    }
+
     // Only super admin can access audit logs
-    if (!await ClerkService.isSuperAdmin()) {
+    if (!await isSuperAdmin(decodedToken.uid)) {
       return apiError('Insufficient permissions', 403, request);
     }
 
@@ -71,5 +80,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function OPTIONS(request: NextRequest) {
-  return handleCors(request);
+  const corsResponse = handleCors(request);
+  return corsResponse || new NextResponse(null, { status: 204 });
 }
