@@ -9,30 +9,42 @@ datasource db {
 }
 
 model User {
-  id                   String         @id @default(uuid())
+  id                   String              @id @default(uuid())
   email                String?
-  firebaseUid          String         @unique @map("firebase_uid")
-  companyId            String?        @map("company_id")
-  createdAt            DateTime       @default(now()) @map("created_at")
-  firstName            String?        @map("first_name")
-  imageUrl             String?        @map("image_url")
-  isActive             Boolean        @default(true) @map("is_active")
-  lastLogin            DateTime?      @map("last_login")
-  lastName             String?        @map("last_name")
-  phone                String?        @unique
-  role                 UserRole       @default(ACCOUNT_USER)
-  updatedAt            DateTime       @updatedAt @map("updated_at")
+  firebaseUid          String              @unique @map("firebase_uid")
+  companyId            String?             @map("company_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  firstName            String?             @map("first_name")
+  imageUrl             String?             @map("image_url")
+  isActive             Boolean             @default(true) @map("is_active")
+  lastLogin            DateTime?           @map("last_login")
+  lastName             String?             @map("last_name")
+  phone                String?             @unique
+  role                 UserRole            @default(ACCOUNT_USER)
+  department           String?
+  position             String?
+  updatedAt            DateTime            @updatedAt @map("updated_at")
   auditLogs            AuditLog[]
   notifications        Notification[]
   otpLogs              OtpLog[]
-  receivedTransactions Transaction[]  @relation("ReceiverTransactions")
-  sentTransactions     Transaction[]  @relation("SenderTransactions")
-  company              Company?       @relation(fields: [companyId], references: [id])
+  receivedTransactions Transaction[]       @relation("ReceiverTransactions")
+  sentTransactions     Transaction[]       @relation("SenderTransactions")
+  company              Company?            @relation(fields: [companyId], references: [id])
+  employeeMetrics      EmployeeMetrics[]
+  createdMerchants     Merchant[]          @relation("MerchantCreator")
+  approvedMerchants    Merchant[]          @relation("MerchantApprover")
+  createdProjects      Project[]           @relation("ProjectCreator")
+  ownedProjects        Project[]           @relation("ProjectOwner")
+  projectTasks         ProjectTask[]
+  approvals            Approval[]          @relation("ApprovalRequester")
+  approvalDecisions    Approval[]          @relation("ApprovalApprover")
+  roleAssignments      RoleAssignment[]
 
   @@index([firebaseUid])
   @@index([phone])
   @@index([companyId])
   @@index([role])
+  @@index([department])
   @@map("users")
 }
 
@@ -231,4 +243,223 @@ enum SubscriptionTier {
   BASIC
   PREMIUM
   ENTERPRISE
+}
+
+model EmployeeMetrics {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  date         DateTime @default(now())
+  productivity Decimal  @default(0) @db.Decimal(5, 2)
+  tasksCompleted Int    @default(0) @map("tasks_completed")
+  tasksAssigned  Int    @default(0) @map("tasks_assigned")
+  hoursWorked    Decimal @default(0) @db.Decimal(5, 2) @map("hours_worked")
+  loginTime      DateTime? @map("login_time")
+  logoutTime     DateTime? @map("logout_time")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([date])
+  @@map("employee_metrics")
+}
+
+model Merchant {
+  id              String         @id @default(uuid())
+  companyId       String         @map("company_id")
+  name            String
+  businessName    String         @map("business_name")
+  email           String
+  phone           String
+  category        String
+  address         String?
+  status          MerchantStatus @default(PENDING)
+  registrationId  String?        @map("registration_id")
+  gstNumber       String?        @map("gst_number")
+  bankAccount     String?        @map("bank_account")
+  ifscCode        String?        @map("ifsc_code")
+  documents       Json           @default("{}")
+  createdById     String         @map("created_by_id")
+  approvedById    String?        @map("approved_by_id")
+  approvedAt      DateTime?      @map("approved_at")
+  rejectedReason  String?        @map("rejected_reason")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  createdBy       User           @relation("MerchantCreator", fields: [createdById], references: [id])
+  approvedBy      User?          @relation("MerchantApprover", fields: [approvedById], references: [id])
+
+  @@index([companyId])
+  @@index([status])
+  @@index([createdById])
+  @@map("merchants")
+}
+
+model Project {
+  id          String        @id @default(uuid())
+  companyId   String        @map("company_id")
+  name        String
+  description String?
+  status      ProjectStatus @default(PLANNING)
+  budget      Decimal?      @db.Decimal(15, 2)
+  spent       Decimal       @default(0) @db.Decimal(15, 2)
+  startDate   DateTime?     @map("start_date")
+  endDate     DateTime?     @map("end_date")
+  progress    Int           @default(0)
+  priority    Priority      @default(MEDIUM)
+  createdById String        @map("created_by_id")
+  ownerId     String        @map("owner_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  createdBy   User          @relation("ProjectCreator", fields: [createdById], references: [id])
+  owner       User          @relation("ProjectOwner", fields: [ownerId], references: [id])
+  tasks       ProjectTask[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([ownerId])
+  @@map("projects")
+}
+
+model ProjectTask {
+  id          String         @id @default(uuid())
+  projectId   String         @map("project_id")
+  title       String
+  description String?
+  status      TaskStatus     @default(TODO)
+  priority    Priority       @default(MEDIUM)
+  assignedTo  String?        @map("assigned_to")
+  dueDate     DateTime?      @map("due_date")
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee    User?          @relation(fields: [assignedTo], references: [id])
+
+  @@index([projectId])
+  @@index([assignedTo])
+  @@index([status])
+  @@map("project_tasks")
+}
+
+model Approval {
+  id            String         @id @default(uuid())
+  companyId     String         @map("company_id")
+  type          ApprovalType
+  title         String
+  description   String?
+  requestedBy   String         @map("requested_by")
+  approvedBy    String?        @map("approved_by")
+  status        ApprovalStatus @default(PENDING)
+  priority      Priority       @default(MEDIUM)
+  amount        Decimal?       @db.Decimal(15, 2)
+  metadata      Json           @default("{}")
+  requestedAt   DateTime       @default(now()) @map("requested_at")
+  reviewedAt    DateTime?      @map("reviewed_at")
+  rejectedReason String?       @map("rejected_reason")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  requester     User           @relation("ApprovalRequester", fields: [requestedBy], references: [id])
+  approver      User?          @relation("ApprovalApprover", fields: [approvedBy], references: [id])
+
+  @@index([companyId])
+  @@index([status])
+  @@index([type])
+  @@index([requestedBy])
+  @@map("approvals")
+}
+
+model CustomRole {
+  id          String           @id @default(uuid())
+  companyId   String           @map("company_id")
+  name        String
+  description String?
+  permissions Json             @default("[]")
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  assignments RoleAssignment[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("custom_roles")
+}
+
+model RoleAssignment {
+  id        String     @id @default(uuid())
+  userId    String     @map("user_id")
+  roleId    String     @map("role_id")
+  assignedAt DateTime  @default(now()) @map("assigned_at")
+  expiresAt DateTime?  @map("expires_at")
+  createdAt DateTime   @default(now()) @map("created_at")
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      CustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+  @@map("role_assignments")
+}
+
+model QrScanLog {
+  id            String   @id @default(uuid())
+  transactionId String?  @map("transaction_id")
+  companyId     String?  @map("company_id")
+  qrType        String   @map("qr_type")
+  scannedAt     DateTime @default(now()) @map("scanned_at")
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  location      Json?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([transactionId])
+  @@index([companyId])
+  @@index([scannedAt])
+  @@map("qr_scan_logs")
+}
+
+enum MerchantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum ApprovalType {
+  EXPENSE
+  MERCHANT
+  PROJECT
+  ROLE_CHANGE
+  SETTING_CHANGE
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
 }
