@@ -1,11 +1,11 @@
 {
-  "name": "k-backend",
+  "name": "authosec-backend",
   "version": "1.0.0",
-  "description": "Next.js backend for K mobile app",
+  "description": "AuthoSec Backend API - Secure transaction platform with dual QR verification",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3001",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -13,21 +13,29 @@
     "prisma:push": "prisma db push"
   },
   "dependencies": {
-    "next": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "@clerk/nextjs": "^6.35.1",
     "@prisma/client": "^6.19.0",
     "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "nanoid": "^5.1.6",
+    "next": "^15.0.0",
+    "otplib": "^12.0.1",
+    "qrcode": "^1.5.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "svix": "^1.81.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/crypto-js": "^4.2.1",
     "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/cors": "^2.8.17",
-    "typescript": "^5.9.2",
-    "prisma": "^6.19.0",
     "eslint": "^9.0.0",
-    "eslint-config-next": "^15.0.0"
+    "eslint-config-next": "^15.0.0",
+    "prisma": "^6.19.0",
+    "typescript": "^5.9.2"
   }
 }
