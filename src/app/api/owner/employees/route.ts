@@ -24,32 +24,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all users with their company info
-    const employees = await prisma.user.findMany({
+    const employees = await prisma.users.findMany({
       where: {
-        companyId: user.companyId || undefined,
+        company_id: user.company_id || undefined,
       },
       select: {
         id: true,
         email: true,
-        firstName: true,
-        lastName: true,
+        first_name: true,
+        last_name: true,
         role: true,
-        createdAt: true,
-        updatedAt: true,
-        company: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        created_at: true,
+        updated_at: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { created_at: 'desc' },
     });
 
     // Transform to employee format with mock productivity data
-    const employeeData = employees.map((emp) => ({
+    const employeeData = employees.map((emp: any) => ({
       id: emp.id,
-      name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.email,
+      name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email,
       email: emp.email,
       role: emp.role,
       department: 'General', // Mock - should come from database

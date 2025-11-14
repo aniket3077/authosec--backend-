@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Get transactions for the period
-    const transactions = await prisma.transaction.aggregate({
+    const transactions = await prisma.transactions.aggregate({
       where: {
-        createdAt: {
+        created_at: {
           gte: startDate,
         },
       },
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       _count: true,
     });
 
-    const revenue = Number(transactions._sum.amount) || 0;
+    const revenue = Number(transactions._sum?.amount) || 0;
     const expenses = revenue * 0.656; // 65.6% mock expenses
     const profit = revenue - expenses;
     const profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0;

@@ -39,15 +39,20 @@ export class OTPService {
       const expiresAt = new Date(Date.now() + this.OTP_EXPIRY_MS);
       
       // Store OTP in database
-      await prisma.otpLog.create({
-        data: {
-          phone: phoneNumber,
-          otpHash,
-          purpose,
-          transactionId,
-          expiresAt,
-          attempts: 0,
-        },
+      const otpData: any = {
+        phone_number: phoneNumber,
+        otp_hash: otpHash,
+        purpose,
+        expires_at: expiresAt,
+        attempts: 0,
+      };
+
+      if (transactionId) {
+        otpData.transaction_id = transactionId;
+      }
+
+      await prisma.otp_logs.create({
+        data: otpData,
       });
       
       // In development, log OTP to console
@@ -82,25 +87,23 @@ export class OTPService {
       
       // Find OTP log
       const where: any = {
-        phone: phoneNumber,
-        otpHash,
+        phone_number: phoneNumber,
+        otp_hash: otpHash,
         purpose,
-        isVerified: false,
-        expiresAt: {
+        is_verified: false,
+        expires_at: {
           gte: new Date(),
         },
       };
-      
+
       if (transactionId) {
-        where.transactionId = transactionId;
+        where.transaction_id = transactionId;
       }
-      
-      const otpLog = await prisma.otpLog.findFirst({
+
+      const otpLog = await prisma.otp_logs.findFirst({
         where,
-        orderBy: { createdAt: 'desc' },
-      });
-      
-      if (!otpLog) {
+        orderBy: { created_at: 'desc' },
+      });      if (!otpLog) {
         throw new Error('Invalid or expired OTP');
       }
       
@@ -110,38 +113,38 @@ export class OTPService {
       }
       
       // Check expiration
-      if (otpLog.expiresAt < new Date()) {
+      if (otpLog.expires_at < new Date()) {
         throw new Error('OTP has expired');
       }
-      
+
       // Mark as verified
-      await prisma.otpLog.update({
+      await prisma.otp_logs.update({
         where: { id: otpLog.id },
         data: {
-          isVerified: true,
-          verifiedAt: new Date(),
+          is_verified: true,
+          verified_at: new Date(),
         },
       });
-      
+
       return {
         success: true,
-        userId: otpLog.userId || undefined,
+        userId: otpLog.user_id || undefined,
       };
     } catch (error: any) {
       // Increment attempts
       try {
         const otpHash = this.hashOTP(otp);
-        const otpLog = await prisma.otpLog.findFirst({
+        const otpLog = await prisma.otp_logs.findFirst({
           where: {
-            phone: phoneNumber,
-            otpHash,
+            phone_number: phoneNumber,
+            otp_hash: otpHash,
             purpose,
-            isVerified: false,
+            is_verified: false,
           },
         });
         
         if (otpLog) {
-          await prisma.otpLog.update({
+          await prisma.otp_logs.update({
             where: { id: otpLog.id },
             data: {
               attempts: { increment: 1 },
@@ -162,13 +165,13 @@ export class OTPService {
    */
   static async invalidateOTPs(phoneNumber: string): Promise<void> {
     try {
-      await prisma.otpLog.updateMany({
+      await prisma.otp_logs.updateMany({
         where: {
-          phone: phoneNumber,
-          isVerified: false,
+          phone_number: phoneNumber,
+          is_verified: false,
         },
         data: {
-          isVerified: true,
+          is_verified: true,
         },
       });
     } catch (error) {

@@ -32,9 +32,9 @@ export async function GET(request: NextRequest) {
 
     // Fetch transaction statistics
     const [currentMonthTransactions, lastMonthTransactions] = await Promise.all([
-      prisma.transaction.aggregate({
+      prisma.transactions.aggregate({
         where: {
-          createdAt: {
+          created_at: {
             gte: firstDayOfMonth,
           },
         },
@@ -43,9 +43,9 @@ export async function GET(request: NextRequest) {
         },
         _count: true,
       }),
-      prisma.transaction.aggregate({
+      prisma.transactions.aggregate({
         where: {
-          createdAt: {
+          created_at: {
             gte: lastMonth,
             lte: lastDayOfLastMonth,
           },
@@ -66,10 +66,10 @@ export async function GET(request: NextRequest) {
 
     // Get user statistics
     const [totalUsers, newUsers] = await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({
+      prisma.users.count(),
+      prisma.users.count({
         where: {
-          createdAt: {
+          created_at: {
             gte: firstDayOfMonth,
           },
         },

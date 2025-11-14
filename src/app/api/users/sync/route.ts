@@ -4,6 +4,7 @@ import { handleCors } from '@/lib/cors';
 import { verifyFirebaseToken } from '@/lib/firebase-auth';
 import { prisma } from '@/lib/prisma';
 import { isAdminEmail } from '@/lib/admin';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * POST /api/users/sync
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // Extract user data from token and request body
     const body = await request.json();
-    const { firstName, lastName, phone } = body;
+    const { firstName, lastName, phone, companyName, businessType, registrationId } = body;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -38,16 +39,17 @@ export async function POST(request: NextRequest) {
       const userEmail = decodedToken.email || existingUser.email;
       const shouldBeAdmin = userEmail && isAdminEmail(userEmail);
       
-      const updatedUser = await prisma.user.update({
-        where: { firebaseUid: decodedToken.uid },
+      const updatedUser = await prisma.users.update({
+        where: { firebase_uid: decodedToken.uid },
         data: { 
-          lastLogin: new Date(),
+          last_login: new Date(),
           // Update role to SUPER_ADMIN if email is in admin list
           ...(shouldBeAdmin && existingUser.role !== 'SUPER_ADMIN' && { role: 'SUPER_ADMIN' }),
           // Update other fields if provided
-          ...(firstName && { firstName }),
-          ...(lastName && { lastName }),
+          ...(firstName && { first_name: firstName }),
+          ...(lastName && { last_name: lastName }),
           ...(phone && { phone }),
+          updated_at: new Date(),
         },
       });
 
@@ -62,29 +64,59 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine user role based on email
+    // Determine user role based on email and company registration
     const userEmail = decodedToken.email;
-    const userRole = userEmail && isAdminEmail(userEmail) ? 'SUPER_ADMIN' : 'ACCOUNT_USER';
+    let userRole: 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'ACCOUNT_USER' = 'ACCOUNT_USER';
+    let companyId: string | null = null;
+
+    // Check if this is a super admin
+    if (userEmail && isAdminEmail(userEmail)) {
+      userRole = 'SUPER_ADMIN';
+    }
+    // Check if this is a company registration
+    else if (companyName && businessType && registrationId) {
+      // Create company first
+      const company = await prisma.companies.create({
+        data: {
+          id: uuidv4(),
+          name: companyName,
+          email: userEmail || '',
+          phone: phone || '',
+          business_type: businessType,
+          registration_id: registrationId,
+          subscription_tier: 'FREE', // Default to FREE tier
+          is_active: true,
+          updated_at: new Date(),
+        },
+      });
+      
+      companyId = company.id;
+      userRole = 'COMPANY_ADMIN'; // Company registrant becomes company owner
+    }
 
     // Create new user in database
-    const newUser = await prisma.user.create({
+    const newUser = await prisma.users.create({
       data: {
-        firebaseUid: decodedToken.uid,
+        id: uuidv4(),
+        firebase_uid: decodedToken.uid,
         email: userEmail || null,
-        firstName: firstName || null,
-        lastName: lastName || null,
+        first_name: firstName || null,
+        last_name: lastName || null,
         phone: phone || null,
         role: userRole,
-        isActive: true,
-        lastLogin: new Date(),
+        company_id: companyId, // Link to company if created
+        is_active: true,
+        last_login: new Date(),
+        updated_at: new Date(),
       },
     });
 
     return apiResponse(
       {
         user: newUser,
-        message: 'User created successfully',
+        message: companyId ? 'Company and user created successfully' : 'User created successfully',
         isNew: true,
+        companyCreated: !!companyId,
       },
       201,
       request

@@ -8,208 +8,429 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-model User {
-  id                   String              @id @default(uuid())
-  email                String?
-  firebaseUid          String              @unique @map("firebase_uid")
-  companyId            String?             @map("company_id")
-  createdAt            DateTime            @default(now()) @map("created_at")
-  firstName            String?             @map("first_name")
-  imageUrl             String?             @map("image_url")
-  isActive             Boolean             @default(true) @map("is_active")
-  lastLogin            DateTime?           @map("last_login")
-  lastName             String?             @map("last_name")
-  phone                String?             @unique
-  role                 UserRole            @default(ACCOUNT_USER)
-  department           String?
-  position             String?
-  updatedAt            DateTime            @updatedAt @map("updated_at")
-  auditLogs            AuditLog[]
-  notifications        Notification[]
-  otpLogs              OtpLog[]
-  receivedTransactions Transaction[]       @relation("ReceiverTransactions")
-  sentTransactions     Transaction[]       @relation("SenderTransactions")
-  company              Company?            @relation(fields: [companyId], references: [id])
-  employeeMetrics      EmployeeMetrics[]
-  createdMerchants     Merchant[]          @relation("MerchantCreator")
-  approvedMerchants    Merchant[]          @relation("MerchantApprover")
-  createdProjects      Project[]           @relation("ProjectCreator")
-  ownedProjects        Project[]           @relation("ProjectOwner")
-  projectTasks         ProjectTask[]
-  approvals            Approval[]          @relation("ApprovalRequester")
-  approvalDecisions    Approval[]          @relation("ApprovalApprover")
-  roleAssignments      RoleAssignment[]
+model approvals {
+  id                                  String         @id
+  company_id                          String
+  type                                ApprovalType
+  title                               String
+  description                         String?
+  requested_by                        String
+  approved_by                         String?
+  status                              ApprovalStatus @default(PENDING)
+  priority                            Priority       @default(MEDIUM)
+  amount                              Decimal?       @db.Decimal(15, 2)
+  metadata                            Json           @default("{}")
+  requested_at                        DateTime       @default(now())
+  reviewed_at                         DateTime?
+  rejected_reason                     String?
+  created_at                          DateTime       @default(now())
+  updated_at                          DateTime
+  users_approvals_approved_byTousers  users?         @relation("approvals_approved_byTousers", fields: [approved_by], references: [id], onDelete: NoAction)
+  users_approvals_requested_byTousers users          @relation("approvals_requested_byTousers", fields: [requested_by], references: [id], onDelete: NoAction)
 
-  @@index([firebaseUid])
-  @@index([phone])
-  @@index([companyId])
-  @@index([role])
-  @@index([department])
-  @@map("users")
+  @@index([company_id])
+  @@index([requested_by])
+  @@index([status])
+  @@index([type])
 }
 
-model Company {
-  id                    String           @id @default(uuid())
-  firebaseOrgId         String?          @unique @map("firebase_org_id")
-  name                  String
-  email                 String           @unique
-  phone                 String
-  businessType          String           @map("business_type")
-  registrationId        String           @unique @map("registration_id")
-  address               String?
-  subscriptionTier      SubscriptionTier @default(FREE) @map("subscription_tier")
-  subscriptionExpiresAt DateTime?        @map("subscription_expires_at")
-  isActive              Boolean          @default(true) @map("is_active")
-  settings              Json             @default("{}")
-  createdAt             DateTime         @default(now()) @map("created_at")
-  updatedAt             DateTime         @updatedAt @map("updated_at")
-  auditLogs             AuditLog[]
-  notifications         Notification[]
-  transactions          Transaction[]
-  users                 User[]
+model audit_logs {
+  id          String     @id
+  user_id     String?
+  company_id  String?
+  action      String
+  resource    String
+  resource_id String?
+  old_values  Json?
+  new_values  Json?
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime   @default(now())
+  companies   companies? @relation(fields: [company_id], references: [id])
+  users       users?     @relation(fields: [user_id], references: [id])
+
+  @@index([company_id])
+  @@index([created_at])
+  @@index([resource])
+  @@index([user_id])
+}
+
+model companies {
+  id                      String           @id
+  clerk_org_id            String?
+  name                    String
+  email                   String           @unique
+  phone                   String
+  business_type           String
+  registration_id         String           @unique
+  address                 String?
+  subscription_tier       SubscriptionTier @default(FREE)
+  subscription_expires_at DateTime?
+  is_active               Boolean          @default(true)
+  settings                Json             @default("{}")
+  created_at              DateTime         @default(now())
+  updated_at              DateTime
+  firebase_org_id         String?          @unique @db.VarChar(255)
+  audit_logs              audit_logs[]
+  notifications           notifications[]
+  transactions            transactions[]
+  users                   users[]
 
   @@index([email])
-  @@index([registrationId])
-  @@index([subscriptionTier])
-  @@map("companies")
+  @@index([registration_id])
+  @@index([subscription_tier])
 }
 
-model Transaction {
-  id                String            @id @default(uuid())
-  transactionNumber String            @unique @map("transaction_number")
-  senderId          String            @map("sender_id")
-  companyId         String?           @map("company_id")
-  receiverId        String            @map("receiver_id")
-  amount            Decimal?          @db.Decimal(15, 2)
-  currency          String            @default("INR")
-  description       String?
-  metadata          Json              @default("{}")
-  status            TransactionStatus @default(INITIATED)
-  qr1Code           String?           @map("qr1_code")
-  qr1EncryptedData  String?           @map("qr1_encrypted_data")
-  qr1GeneratedAt    DateTime?         @map("qr1_generated_at")
-  qr1ExpiresAt      DateTime?         @map("qr1_expires_at")
-  qr2Code           String?           @map("qr2_code")
-  qr2EncryptedData  String?           @map("qr2_encrypted_data")
-  qr2GeneratedAt    DateTime?         @map("qr2_generated_at")
-  qr2ExpiresAt      DateTime?         @map("qr2_expires_at")
-  otpHash           String?           @map("otp_hash")
-  otpSentAt         DateTime?         @map("otp_sent_at")
-  otpVerifiedAt     DateTime?         @map("otp_verified_at")
-  otpAttempts       Int               @default(0) @map("otp_attempts")
-  encryptionKey     String?           @map("encryption_key")
-  iv                String?
-  initiatedAt       DateTime          @default(now()) @map("initiated_at")
-  completedAt       DateTime?         @map("completed_at")
-  failedAt          DateTime?         @map("failed_at")
-  expiresAt         DateTime?         @map("expires_at")
-  createdAt         DateTime          @default(now()) @map("created_at")
-  updatedAt         DateTime          @updatedAt @map("updated_at")
-  otpLogs           OtpLog[]
-  logs              TransactionLog[]
-  company           Company?          @relation(fields: [companyId], references: [id])
-  receiver          User              @relation("ReceiverTransactions", fields: [receiverId], references: [id], onDelete: Cascade)
-  sender            User              @relation("SenderTransactions", fields: [senderId], references: [id], onDelete: Cascade)
+model custom_roles {
+  id               String             @id
+  company_id       String
+  name             String
+  description      String?
+  permissions      Json               @default("[]")
+  is_active        Boolean            @default(true)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  role_assignments role_assignments[]
 
-  @@index([transactionNumber])
-  @@index([senderId])
-  @@index([receiverId])
-  @@index([companyId])
+  @@unique([company_id, name])
+  @@index([company_id])
+}
+
+model employee_metrics {
+  id              String    @id
+  user_id         String
+  date            DateTime  @default(now())
+  productivity    Decimal   @default(0) @db.Decimal(5, 2)
+  tasks_completed Int       @default(0)
+  tasks_assigned  Int       @default(0)
+  hours_worked    Decimal   @default(0) @db.Decimal(5, 2)
+  login_time      DateTime?
+  logout_time     DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime
+  users           users     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([user_id])
+}
+
+model merchants {
+  id                                    String         @id
+  company_id                            String
+  name                                  String
+  business_name                         String
+  email                                 String
+  phone                                 String
+  category                              String
+  address                               String?
+  status                                MerchantStatus @default(PENDING)
+  registration_id                       String?
+  gst_number                            String?
+  bank_account                          String?
+  ifsc_code                             String?
+  documents                             Json           @default("{}")
+  created_by_id                         String
+  approved_by_id                        String?
+  approved_at                           DateTime?
+  rejected_reason                       String?
+  created_at                            DateTime       @default(now())
+  updated_at                            DateTime
+  users_merchants_approved_by_idTousers users?         @relation("merchants_approved_by_idTousers", fields: [approved_by_id], references: [id], onDelete: NoAction)
+  users_merchants_created_by_idTousers  users          @relation("merchants_created_by_idTousers", fields: [created_by_id], references: [id], onDelete: NoAction)
+
+  @@index([company_id])
+  @@index([created_by_id])
   @@index([status])
-  @@index([createdAt])
-  @@map("transactions")
 }
 
-model TransactionLog {
-  id            String      @id @default(uuid())
-  transactionId String      @map("transaction_id")
-  action        String
-  status        String?
-  metadata      Json        @default("{}")
-  ipAddress     String?     @map("ip_address")
-  userAgent     String?     @map("user_agent")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+model notifications {
+  id         String               @id
+  user_id    String
+  company_id String?
+  title      String
+  message    String
+  is_read    Boolean              @default(false)
+  read_at    DateTime?
+  action_url String?
+  metadata   Json                 @default("{}")
+  created_at DateTime             @default(now())
+  type       NotificationType
+  priority   NotificationPriority @default(NORMAL)
+  companies  companies?           @relation(fields: [company_id], references: [id], onDelete: Cascade)
+  users      users                @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([transactionId])
-  @@index([createdAt])
-  @@map("transaction_logs")
+  @@index([company_id])
+  @@index([created_at])
+  @@index([is_read])
+  @@index([user_id])
 }
 
-model OtpLog {
-  id            String       @id @default(uuid())
-  userId        String?      @map("user_id")
-  phone         String       @map("phone_number")
-  otpHash       String       @map("otp_hash")
-  purpose       String
-  transactionId String?      @map("transaction_id")
-  isVerified    Boolean      @default(false) @map("is_verified")
-  verifiedAt    DateTime?    @map("verified_at")
-  attempts      Int          @default(0)
-  expiresAt     DateTime     @map("expires_at")
-  ipAddress     String?      @map("ip_address")
-  userAgent     String?      @map("user_agent")
-  createdAt     DateTime     @default(now()) @map("created_at")
-  transaction   Transaction? @relation(fields: [transactionId], references: [id])
-  user          User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+model otp_logs {
+  id             String        @id
+  user_id        String?
+  phone_number   String
+  otp_hash       String
+  purpose        String
+  transaction_id String?
+  is_verified    Boolean       @default(false)
+  verified_at    DateTime?
+  attempts       Int           @default(0)
+  expires_at     DateTime
+  ip_address     String?
+  user_agent     String?
+  created_at     DateTime      @default(now())
+  transactions   transactions? @relation(fields: [transaction_id], references: [id])
+  users          users?        @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([phone])
-  @@index([transactionId])
+  @@index([expires_at])
+  @@index([phone_number])
   @@index([purpose])
-  @@index([expiresAt])
-  @@map("otp_logs")
+  @@index([transaction_id])
+  @@index([user_id])
 }
 
-model Notification {
-  id        String               @id @default(uuid())
-  userId    String               @map("user_id")
-  companyId String?              @map("company_id")
-  title     String
-  message   String
-  type      NotificationType
-  priority  NotificationPriority @default(NORMAL)
-  isRead    Boolean              @default(false) @map("is_read")
-  readAt    DateTime?            @map("read_at")
-  actionUrl String?              @map("action_url")
-  metadata  Json                 @default("{}")
-  createdAt DateTime             @default(now()) @map("created_at")
-  company   Company?             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+model project_tasks {
+  id           String     @id
+  project_id   String
+  title        String
+  description  String?
+  status       TaskStatus @default(TODO)
+  priority     Priority   @default(MEDIUM)
+  assigned_to  String?
+  due_date     DateTime?
+  completed_at DateTime?
+  created_at   DateTime   @default(now())
+  updated_at   DateTime
+  users        users?     @relation(fields: [assigned_to], references: [id], onDelete: NoAction)
+  projects     projects   @relation(fields: [project_id], references: [id], onDelete: Cascade)
 
-  @@index([userId])
-  @@index([companyId])
-  @@index([isRead])
-  @@index([createdAt])
-  @@map("notifications")
+  @@index([assigned_to])
+  @@index([project_id])
+  @@index([status])
 }
 
-model AuditLog {
-  id         String   @id @default(uuid())
-  userId     String?  @map("user_id")
-  companyId  String?  @map("company_id")
-  action     String
-  resource   String
-  resourceId String?  @map("resource_id")
-  oldValues  Json?    @map("old_values")
-  newValues  Json?    @map("new_values")
-  ipAddress  String?  @map("ip_address")
-  userAgent  String?  @map("user_agent")
-  createdAt  DateTime @default(now()) @map("created_at")
-  company    Company? @relation(fields: [companyId], references: [id])
-  user       User?    @relation(fields: [userId], references: [id])
+model projects {
+  id                                  String          @id
+  company_id                          String
+  name                                String
+  description                         String?
+  status                              ProjectStatus   @default(PLANNING)
+  budget                              Decimal?        @db.Decimal(15, 2)
+  spent                               Decimal         @default(0) @db.Decimal(15, 2)
+  start_date                          DateTime?
+  end_date                            DateTime?
+  progress                            Int             @default(0)
+  priority                            Priority        @default(MEDIUM)
+  created_by_id                       String
+  owner_id                            String
+  created_at                          DateTime        @default(now())
+  updated_at                          DateTime
+  project_tasks                       project_tasks[]
+  users_projects_created_by_idTousers users           @relation("projects_created_by_idTousers", fields: [created_by_id], references: [id], onDelete: NoAction)
+  users_projects_owner_idTousers      users           @relation("projects_owner_idTousers", fields: [owner_id], references: [id], onDelete: NoAction)
 
-  @@index([userId])
-  @@index([companyId])
-  @@index([resource])
-  @@index([createdAt])
-  @@map("audit_logs")
+  @@index([company_id])
+  @@index([owner_id])
+  @@index([status])
 }
 
-enum UserRole {
-  SUPER_ADMIN
-  COMPANY_ADMIN
-  ACCOUNT_USER
+model qr_scan_logs {
+  id             String   @id
+  transaction_id String?
+  company_id     String?
+  qr_type        String
+  scanned_at     DateTime @default(now())
+  ip_address     String?
+  user_agent     String?
+  location       Json?
+  metadata       Json     @default("{}")
+  created_at     DateTime @default(now())
+
+  @@index([company_id])
+  @@index([scanned_at])
+  @@index([transaction_id])
+}
+
+model role_assignments {
+  id           String       @id
+  user_id      String
+  role_id      String
+  assigned_at  DateTime     @default(now())
+  expires_at   DateTime?
+  created_at   DateTime     @default(now())
+  custom_roles custom_roles @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  users        users        @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, role_id])
+  @@index([role_id])
+  @@index([user_id])
+}
+
+model transaction_logs {
+  id             String       @id
+  transaction_id String
+  action         String
+  status         String?
+  metadata       Json         @default("{}")
+  ip_address     String?
+  user_agent     String?
+  created_at     DateTime     @default(now())
+  transactions   transactions @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([transaction_id])
+}
+
+model transactions {
+  id                                    String             @id
+  transaction_number                    String             @unique
+  sender_id                             String
+  company_id                            String?
+  receiver_id                           String
+  amount                                Decimal?           @db.Decimal(15, 2)
+  currency                              String             @default("INR")
+  description                           String?
+  metadata                              Json               @default("{}")
+  status                                TransactionStatus  @default(INITIATED)
+  qr1_code                              String?
+  qr1_encrypted_data                    String?
+  qr1_generated_at                      DateTime?
+  qr1_expires_at                        DateTime?
+  qr2_code                              String?
+  qr2_encrypted_data                    String?
+  qr2_generated_at                      DateTime?
+  qr2_expires_at                        DateTime?
+  otp_hash                              String?
+  otp_sent_at                           DateTime?
+  otp_verified_at                       DateTime?
+  otp_attempts                          Int                @default(0)
+  encryption_key                        String?
+  iv                                    String?
+  initiated_at                          DateTime           @default(now())
+  completed_at                          DateTime?
+  failed_at                             DateTime?
+  expires_at                            DateTime?
+  created_at                            DateTime           @default(now())
+  updated_at                            DateTime
+  otp_logs                              otp_logs[]
+  transaction_logs                      transaction_logs[]
+  companies                             companies?         @relation(fields: [company_id], references: [id])
+  users_transactions_receiver_idTousers users              @relation("transactions_receiver_idTousers", fields: [receiver_id], references: [id], onDelete: Cascade)
+  users_transactions_sender_idTousers   users              @relation("transactions_sender_idTousers", fields: [sender_id], references: [id], onDelete: Cascade)
+
+  @@index([company_id])
+  @@index([created_at])
+  @@index([receiver_id])
+  @@index([sender_id])
+  @@index([status])
+  @@index([transaction_number])
+}
+
+model users {
+  id                                           String             @id
+  email                                        String?
+  clerk_id                                     String?
+  company_id                                   String?
+  created_at                                   DateTime           @default(now())
+  first_name                                   String?
+  image_url                                    String?
+  is_active                                    Boolean            @default(true)
+  last_login                                   DateTime?
+  last_name                                    String?
+  phone                                        String?            @unique
+  role                                         UserRole           @default(ACCOUNT_USER)
+  updated_at                                   DateTime
+  firebase_uid                                 String?            @unique @db.VarChar(255)
+  department                                   String?
+  position                                     String?
+  approvals_approvals_approved_byTousers       approvals[]        @relation("approvals_approved_byTousers")
+  approvals_approvals_requested_byTousers      approvals[]        @relation("approvals_requested_byTousers")
+  audit_logs                                   audit_logs[]
+  employee_metrics                             employee_metrics[]
+  merchants_merchants_approved_by_idTousers    merchants[]        @relation("merchants_approved_by_idTousers")
+  merchants_merchants_created_by_idTousers     merchants[]        @relation("merchants_created_by_idTousers")
+  notifications                                notifications[]
+  otp_logs                                     otp_logs[]
+  project_tasks                                project_tasks[]
+  projects_projects_created_by_idTousers       projects[]         @relation("projects_created_by_idTousers")
+  projects_projects_owner_idTousers            projects[]         @relation("projects_owner_idTousers")
+  role_assignments                             role_assignments[]
+  transactions_transactions_receiver_idTousers transactions[]     @relation("transactions_receiver_idTousers")
+  transactions_transactions_sender_idTousers   transactions[]     @relation("transactions_sender_idTousers")
+  companies                                    companies?         @relation(fields: [company_id], references: [id])
+
+  @@index([company_id])
+  @@index([department])
+  @@index([firebase_uid])
+  @@index([phone])
+  @@index([role])
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalType {
+  EXPENSE
+  MERCHANT
+  PROJECT
+  ROLE_CHANGE
+  SETTING_CHANGE
+  OTHER
+}
+
+enum MerchantStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  TRANSACTION
+  SECURITY
+  SYSTEM
+  ALERT
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum SubscriptionTier {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  COMPLETED
+  CANCELLED
 }
 
 enum TransactionStatus {
@@ -224,242 +445,8 @@ enum TransactionStatus {
   CANCELLED
 }
 
-enum NotificationType {
-  TRANSACTION
-  SECURITY
-  SYSTEM
-  ALERT
-}
-
-enum NotificationPriority {
-  LOW
-  NORMAL
-  HIGH
-  URGENT
-}
-
-enum SubscriptionTier {
-  FREE
-  BASIC
-  PREMIUM
-  ENTERPRISE
-}
-
-model EmployeeMetrics {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  date         DateTime @default(now())
-  productivity Decimal  @default(0) @db.Decimal(5, 2)
-  tasksCompleted Int    @default(0) @map("tasks_completed")
-  tasksAssigned  Int    @default(0) @map("tasks_assigned")
-  hoursWorked    Decimal @default(0) @db.Decimal(5, 2) @map("hours_worked")
-  loginTime      DateTime? @map("login_time")
-  logoutTime     DateTime? @map("logout_time")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([date])
-  @@map("employee_metrics")
-}
-
-model Merchant {
-  id              String         @id @default(uuid())
-  companyId       String         @map("company_id")
-  name            String
-  businessName    String         @map("business_name")
-  email           String
-  phone           String
-  category        String
-  address         String?
-  status          MerchantStatus @default(PENDING)
-  registrationId  String?        @map("registration_id")
-  gstNumber       String?        @map("gst_number")
-  bankAccount     String?        @map("bank_account")
-  ifscCode        String?        @map("ifsc_code")
-  documents       Json           @default("{}")
-  createdById     String         @map("created_by_id")
-  approvedById    String?        @map("approved_by_id")
-  approvedAt      DateTime?      @map("approved_at")
-  rejectedReason  String?        @map("rejected_reason")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-  createdBy       User           @relation("MerchantCreator", fields: [createdById], references: [id])
-  approvedBy      User?          @relation("MerchantApprover", fields: [approvedById], references: [id])
-
-  @@index([companyId])
-  @@index([status])
-  @@index([createdById])
-  @@map("merchants")
-}
-
-model Project {
-  id          String        @id @default(uuid())
-  companyId   String        @map("company_id")
-  name        String
-  description String?
-  status      ProjectStatus @default(PLANNING)
-  budget      Decimal?      @db.Decimal(15, 2)
-  spent       Decimal       @default(0) @db.Decimal(15, 2)
-  startDate   DateTime?     @map("start_date")
-  endDate     DateTime?     @map("end_date")
-  progress    Int           @default(0)
-  priority    Priority      @default(MEDIUM)
-  createdById String        @map("created_by_id")
-  ownerId     String        @map("owner_id")
-  createdAt   DateTime      @default(now()) @map("created_at")
-  updatedAt   DateTime      @updatedAt @map("updated_at")
-  createdBy   User          @relation("ProjectCreator", fields: [createdById], references: [id])
-  owner       User          @relation("ProjectOwner", fields: [ownerId], references: [id])
-  tasks       ProjectTask[]
-
-  @@index([companyId])
-  @@index([status])
-  @@index([ownerId])
-  @@map("projects")
-}
-
-model ProjectTask {
-  id          String         @id @default(uuid())
-  projectId   String         @map("project_id")
-  title       String
-  description String?
-  status      TaskStatus     @default(TODO)
-  priority    Priority       @default(MEDIUM)
-  assignedTo  String?        @map("assigned_to")
-  dueDate     DateTime?      @map("due_date")
-  completedAt DateTime?      @map("completed_at")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee    User?          @relation(fields: [assignedTo], references: [id])
-
-  @@index([projectId])
-  @@index([assignedTo])
-  @@index([status])
-  @@map("project_tasks")
-}
-
-model Approval {
-  id            String         @id @default(uuid())
-  companyId     String         @map("company_id")
-  type          ApprovalType
-  title         String
-  description   String?
-  requestedBy   String         @map("requested_by")
-  approvedBy    String?        @map("approved_by")
-  status        ApprovalStatus @default(PENDING)
-  priority      Priority       @default(MEDIUM)
-  amount        Decimal?       @db.Decimal(15, 2)
-  metadata      Json           @default("{}")
-  requestedAt   DateTime       @default(now()) @map("requested_at")
-  reviewedAt    DateTime?      @map("reviewed_at")
-  rejectedReason String?       @map("rejected_reason")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-  requester     User           @relation("ApprovalRequester", fields: [requestedBy], references: [id])
-  approver      User?          @relation("ApprovalApprover", fields: [approvedBy], references: [id])
-
-  @@index([companyId])
-  @@index([status])
-  @@index([type])
-  @@index([requestedBy])
-  @@map("approvals")
-}
-
-model CustomRole {
-  id          String           @id @default(uuid())
-  companyId   String           @map("company_id")
-  name        String
-  description String?
-  permissions Json             @default("[]")
-  isActive    Boolean          @default(true) @map("is_active")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  assignments RoleAssignment[]
-
-  @@unique([companyId, name])
-  @@index([companyId])
-  @@map("custom_roles")
-}
-
-model RoleAssignment {
-  id        String     @id @default(uuid())
-  userId    String     @map("user_id")
-  roleId    String     @map("role_id")
-  assignedAt DateTime  @default(now()) @map("assigned_at")
-  expiresAt DateTime?  @map("expires_at")
-  createdAt DateTime   @default(now()) @map("created_at")
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role      CustomRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, roleId])
-  @@index([userId])
-  @@index([roleId])
-  @@map("role_assignments")
-}
-
-model QrScanLog {
-  id            String   @id @default(uuid())
-  transactionId String?  @map("transaction_id")
-  companyId     String?  @map("company_id")
-  qrType        String   @map("qr_type")
-  scannedAt     DateTime @default(now()) @map("scanned_at")
-  ipAddress     String?  @map("ip_address")
-  userAgent     String?  @map("user_agent")
-  location      Json?
-  metadata      Json     @default("{}")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  @@index([transactionId])
-  @@index([companyId])
-  @@index([scannedAt])
-  @@map("qr_scan_logs")
-}
-
-enum MerchantStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  SUSPENDED
-}
-
-enum ProjectStatus {
-  PLANNING
-  IN_PROGRESS
-  ON_HOLD
-  COMPLETED
-  CANCELLED
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  IN_REVIEW
-  COMPLETED
-  CANCELLED
-}
-
-enum ApprovalType {
-  EXPENSE
-  MERCHANT
-  PROJECT
-  ROLE_CHANGE
-  SETTING_CHANGE
-  OTHER
-}
-
-enum ApprovalStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
-}
-
-enum Priority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+enum UserRole {
+  SUPER_ADMIN
+  COMPANY_ADMIN
+  ACCOUNT_USER
 }

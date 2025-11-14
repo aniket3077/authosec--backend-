@@ -2,6 +2,7 @@ import { auth } from './firebase-admin';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { prisma } from './prisma';
 import { UserRole } from '@prisma/client';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Firebase Authentication Service
@@ -22,35 +23,38 @@ export interface FirebaseUserData {
  * Creates or updates user in our database
  */
 export async function syncUserWithDatabase(firebaseUser: FirebaseUserData) {
-  const existingUser = await prisma.user.findUnique({
-    where: { firebaseUid: firebaseUser.firebaseUid },
+  const existingUser = await prisma.users.findUnique({
+    where: { firebase_uid: firebaseUser.firebaseUid },
   });
 
   if (existingUser) {
     // Update existing user
-    return await prisma.user.update({
-      where: { firebaseUid: firebaseUser.firebaseUid },
+    return await prisma.users.update({
+      where: { firebase_uid: firebaseUser.firebaseUid },
       data: {
         email: firebaseUser.email,
         phone: firebaseUser.phone,
-        firstName: firebaseUser.firstName,
-        lastName: firebaseUser.lastName,
-        imageUrl: firebaseUser.imageUrl,
-        lastLogin: new Date(),
+        first_name: firebaseUser.firstName,
+        last_name: firebaseUser.lastName,
+        image_url: firebaseUser.imageUrl,
+        last_login: new Date(),
+        updated_at: new Date(),
       },
     });
   } else {
     // Create new user
-    return await prisma.user.create({
+    return await prisma.users.create({
       data: {
-        firebaseUid: firebaseUser.firebaseUid,
+        id: uuidv4(),
+        firebase_uid: firebaseUser.firebaseUid,
         email: firebaseUser.email,
         phone: firebaseUser.phone,
-        firstName: firebaseUser.firstName,
-        lastName: firebaseUser.lastName,
-        imageUrl: firebaseUser.imageUrl,
+        first_name: firebaseUser.firstName,
+        last_name: firebaseUser.lastName,
+        image_url: firebaseUser.imageUrl,
         role: UserRole.ACCOUNT_USER,
-        lastLogin: new Date(),
+        last_login: new Date(),
+        updated_at: new Date(),
       },
     });
   }
@@ -60,11 +64,8 @@ export async function syncUserWithDatabase(firebaseUser: FirebaseUserData) {
  * Get user from database by Firebase UID
  */
 export async function getUserByFirebaseUid(firebaseUid: string) {
-  return await prisma.user.findUnique({
-    where: { firebaseUid },
-    include: {
-      company: true,
-    },
+  return await prisma.users.findUnique({
+    where: { firebase_uid: firebaseUid },
   });
 }
 
@@ -72,11 +73,8 @@ export async function getUserByFirebaseUid(firebaseUid: string) {
  * Get user from database by ID
  */
 export async function getUserById(userId: string) {
-  return await prisma.user.findUnique({
+  return await prisma.users.findUnique({
     where: { id: userId },
-    include: {
-      company: true,
-    },
   });
 }
 
@@ -110,10 +108,10 @@ export async function isCompanyAdmin(firebaseUid: string) {
  */
 export async function getUserCompany(firebaseUid: string) {
   const user = await getUserByFirebaseUid(firebaseUid);
-  if (!user || !user.companyId) return null;
+  if (!user || !user.company_id) return null;
 
-  return await prisma.company.findUnique({
-    where: { id: user.companyId },
+  return await prisma.companies.findUnique({
+    where: { id: user.company_id },
   });
 }
 
@@ -121,9 +119,12 @@ export async function getUserCompany(firebaseUid: string) {
  * Assign role to user
  */
 export async function assignRole(userId: string, role: UserRole) {
-  return await prisma.user.update({
+  return await prisma.users.update({
     where: { id: userId },
-    data: { role },
+    data: { 
+      role,
+      updated_at: new Date(),
+    },
   });
 }
 
@@ -131,9 +132,12 @@ export async function assignRole(userId: string, role: UserRole) {
  * Assign user to company
  */
 export async function assignUserToCompany(userId: string, companyId: string) {
-  return await prisma.user.update({
+  return await prisma.users.update({
     where: { id: userId },
-    data: { companyId },
+    data: { 
+      company_id: companyId,
+      updated_at: new Date(),
+    },
   });
 }
 
