@@ -29,9 +29,23 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { firstName, lastName, phone, companyName, businessType, registrationId } = body;
 
+    // Validate email format if provided
+    const userEmail = decodedToken.email;
+    if (userEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userEmail)) {
+      return apiError('Invalid email format', 400, request);
+    }
+
+    // Validate phone number format if provided (E.164 format)
+    if (phone && phone.trim()) {
+      const phoneRegex = /^\+[1-9]\d{1,14}$/;
+      if (!phoneRegex.test(phone.trim())) {
+        return apiError('Invalid phone number format. Please use E.164 format (e.g., +919876543210)', 400, request);
+      }
+    }
+
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { firebaseUid: decodedToken.uid },
+    const existingUser = await prisma.users.findUnique({
+      where: { firebase_uid: decodedToken.uid },
     });
 
     if (existingUser) {
@@ -46,16 +60,32 @@ export async function POST(request: NextRequest) {
           // Update role to SUPER_ADMIN if email is in admin list
           ...(shouldBeAdmin && existingUser.role !== 'SUPER_ADMIN' && { role: 'SUPER_ADMIN' }),
           // Update other fields if provided
-          ...(firstName && { first_name: firstName }),
-          ...(lastName && { last_name: lastName }),
-          ...(phone && { phone }),
+          ...(firstName && { first_name: firstName.trim() }),
+          ...(lastName && { last_name: lastName.trim() }),
+          ...(phone && { phone: phone.trim() }),
           updated_at: new Date(),
         },
       });
 
+      // Transform to camelCase
+      const userResponse = {
+        id: updatedUser.id,
+        firebaseUid: updatedUser.firebase_uid,
+        email: updatedUser.email,
+        firstName: updatedUser.first_name,
+        lastName: updatedUser.last_name,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        companyId: updatedUser.company_id,
+        isActive: updatedUser.is_active,
+        lastLogin: updatedUser.last_login,
+        createdAt: updatedUser.created_at,
+        updatedAt: updatedUser.updated_at,
+      };
+
       return apiResponse(
         {
-          user: updatedUser,
+          user: userResponse,
           message: 'User synced successfully',
           isNew: false,
         },
@@ -65,7 +95,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine user role based on email and company registration
-    const userEmail = decodedToken.email;
     let userRole: 'SUPER_ADMIN' | 'COMPANY_ADMIN' | 'ACCOUNT_USER' = 'ACCOUNT_USER';
     let companyId: string | null = null;
 
@@ -75,15 +104,20 @@ export async function POST(request: NextRequest) {
     }
     // Check if this is a company registration
     else if (companyName && businessType && registrationId) {
+      // Validate company fields
+      if (!companyName.trim() || !businessType.trim() || !registrationId.trim()) {
+        return apiError('Company name, business type, and registration ID are required', 400, request);
+      }
+
       // Create company first
       const company = await prisma.companies.create({
         data: {
           id: uuidv4(),
-          name: companyName,
+          name: companyName.trim(),
           email: userEmail || '',
-          phone: phone || '',
-          business_type: businessType,
-          registration_id: registrationId,
+          phone: phone?.trim() || '',
+          business_type: businessType.trim(),
+          registration_id: registrationId.trim(),
           subscription_tier: 'FREE', // Default to FREE tier
           is_active: true,
           updated_at: new Date(),
@@ -100,9 +134,9 @@ export async function POST(request: NextRequest) {
         id: uuidv4(),
         firebase_uid: decodedToken.uid,
         email: userEmail || null,
-        first_name: firstName || null,
-        last_name: lastName || null,
-        phone: phone || null,
+        first_name: firstName?.trim() || null,
+        last_name: lastName?.trim() || null,
+        phone: phone?.trim() || null,
         role: userRole,
         company_id: companyId, // Link to company if created
         is_active: true,
@@ -111,9 +145,25 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Transform to camelCase
+    const userResponse = {
+      id: newUser.id,
+      firebaseUid: newUser.firebase_uid,
+      email: newUser.email,
+      firstName: newUser.first_name,
+      lastName: newUser.last_name,
+      phone: newUser.phone,
+      role: newUser.role,
+      companyId: newUser.company_id,
+      isActive: newUser.is_active,
+      lastLogin: newUser.last_login,
+      createdAt: newUser.created_at,
+      updatedAt: newUser.updated_at,
+    };
+
     return apiResponse(
       {
-        user: newUser,
+        user: userResponse,
         message: companyId ? 'Company and user created successfully' : 'User created successfully',
         isNew: true,
         companyCreated: !!companyId,

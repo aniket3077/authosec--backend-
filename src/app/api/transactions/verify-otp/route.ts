@@ -17,19 +17,28 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { transactionId, otp } = verifyOTPSchema.parse(body);
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transactions.findUnique({
       where: { id: transactionId },
       include: {
-        receiver: true,
-        company: true,
+        users_transactions_receiver_idTousers: true,
+        companies: true,
       },
     });
 
@@ -38,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is the sender
-    if (transaction.senderId !== user.id) {
+    if (transaction.sender_id !== user.id) {
       return apiError('Unauthorized', 403, request);
     }
 
@@ -47,9 +56,18 @@ export async function POST(request: NextRequest) {
       return apiError('Invalid transaction status', 400, request);
     }
 
+    // VALIDATION: Ensure both QR codes were scanned before verifying OTP
+    if (!transaction.qr1_generated_at) {
+      return apiError('QR1 must be scanned before verifying OTP', 400, request);
+    }
+
+    if (!transaction.qr2_generated_at) {
+      return apiError('QR2 must be scanned before verifying OTP', 400, request);
+    }
+
     // Check OTP attempts
-    if (transaction.otpAttempts >= 3) {
-      await prisma.transaction.update({
+    if (transaction.otp_attempts >= 3) {
+      await prisma.transactions.update({
         where: { id: transactionId },
         data: { status: 'FAILED' },
       });
@@ -64,71 +82,59 @@ export async function POST(request: NextRequest) {
       // Verify OTP
       await OTPService.verifyOTP(user.phone, otp, 'transaction', transactionId);
 
-      // Update transaction to completed
-      await prisma.transaction.update({
+      // Update transaction to OTP_VERIFIED (not COMPLETED yet)
+      await prisma.transactions.update({
         where: { id: transactionId },
         data: {
-          status: 'COMPLETED',
-          otpVerifiedAt: new Date(),
-          completedAt: new Date(),
+          status: 'OTP_VERIFIED',
+          otp_verified_at: new Date(),
         },
       });
 
       // Log the action
-      await prisma.transactionLog.create({
+      await prisma.transaction_logs.create({
         data: {
-          transactionId: transaction.id,
-          action: 'TRANSACTION_COMPLETED',
-          status: 'COMPLETED',
+          transaction_id: transaction.id,
+          action: 'OTP_VERIFIED',
+          status: 'OTP_VERIFIED',
           metadata: { verifiedBy: user.id },
         },
       });
 
-      // Notify both parties
-      await prisma.notification.createMany({
-        data: [
-          {
-            userId: transaction.senderId,
-            companyId: transaction.companyId,
-            title: 'Transaction Completed',
-            message: `Transaction ${transaction.transactionNumber} completed successfully`,
-            type: 'TRANSACTION',
-            priority: 'HIGH',
-            actionUrl: `/transactions/${transaction.id}`,
-          },
-          {
-            userId: transaction.receiverId,
-            companyId: transaction.companyId,
-            title: 'Payment Received',
-            message: `Payment of ${transaction.currency} ${transaction.amount} received`,
-            type: 'TRANSACTION',
-            priority: 'HIGH',
-            actionUrl: `/transactions/${transaction.id}`,
-          },
-        ],
+      // Notify sender that OTP is verified and payment needs to be completed
+      await prisma.notifications.create({
+        data: {
+          user_id: transaction.sender_id,
+          company_id: transaction.company_id,
+          title: 'OTP Verified',
+          message: `OTP verified for transaction ${transaction.transaction_number}. Complete payment to finish.`,
+          type: 'TRANSACTION',
+          priority: 'HIGH',
+          action_url: `/transactions/${transaction.id}`,
+        },
       });
 
       return apiResponse(
         {
           transaction: {
             id: transaction.id,
-            transactionNumber: transaction.transactionNumber,
+            transactionNumber: transaction.transaction_number,
             amount: transaction.amount,
             currency: transaction.currency,
-            status: 'COMPLETED',
-            completedAt: new Date().toISOString(),
+            status: 'OTP_VERIFIED',
+            otpVerifiedAt: new Date().toISOString(),
           },
-          message: 'Transaction completed successfully!',
+          message: 'OTP verified successfully! Complete payment to finish transaction.',
         },
         200,
         request
       );
     } catch (otpError: any) {
       // Increment OTP attempts
-      await prisma.transaction.update({
+      await prisma.transactions.update({
         where: { id: transactionId },
         data: {
-          otpAttempts: { increment: 1 },
+          otp_attempts: { increment: 1 },
         },
       });
 

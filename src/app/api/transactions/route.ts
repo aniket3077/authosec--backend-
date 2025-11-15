@@ -10,9 +10,18 @@ export async function GET(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const { searchParams } = new URL(request.url);
@@ -24,8 +33,8 @@ export async function GET(request: NextRequest) {
     // Build where clause
     const where: any = {
       OR: [
-        { senderId: user.id },
-        { receiverId: user.id },
+        { sender_id: user.id },
+        { receiver_id: user.id },
       ],
     };
 
@@ -34,29 +43,29 @@ export async function GET(request: NextRequest) {
     }
 
     // Get total count
-    const total = await prisma.transaction.count({ where });
+    const total = await prisma.transactions.count({ where });
 
     // Get transactions
-    const transactions = await prisma.transaction.findMany({
+    const transactions = await prisma.transactions.findMany({
       where,
       include: {
-        sender: {
+        users_transactions_sender_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
           },
         },
-        receiver: {
+        users_transactions_receiver_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
-            company: {
+            companies: {
               select: {
                 id: true,
                 name: true,
@@ -65,22 +74,45 @@ export async function GET(request: NextRequest) {
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { created_at: 'desc' },
       skip,
       take: limit,
     });
 
-    return apiResponse(
-      {
-        transactions,
-        pagination: {
-          page,
-          limit,
-          total,
-          totalPages: Math.ceil(total / limit),
-          hasMore: skip + limit < total,
-        },
+    // Transform to expected format
+    const transformedTransactions = transactions.map(t => ({
+      id: t.id,
+      transactionNumber: t.transaction_number,
+      senderId: t.sender_id,
+      receiverId: t.receiver_id,
+      amount: t.amount ? parseFloat(t.amount.toString()) : null,
+      currency: t.currency,
+      description: t.description,
+      status: t.status,
+      createdAt: t.created_at,
+      completedAt: t.completed_at,
+      sender: {
+        id: t.users_transactions_sender_idTousers.id,
+        firstName: t.users_transactions_sender_idTousers.first_name,
+        lastName: t.users_transactions_sender_idTousers.last_name,
+        email: t.users_transactions_sender_idTousers.email,
+        phone: t.users_transactions_sender_idTousers.phone,
       },
+      receiver: {
+        id: t.users_transactions_receiver_idTousers.id,
+        firstName: t.users_transactions_receiver_idTousers.first_name,
+        lastName: t.users_transactions_receiver_idTousers.last_name,
+        email: t.users_transactions_receiver_idTousers.email,
+        phone: t.users_transactions_receiver_idTousers.phone,
+        company: t.users_transactions_receiver_idTousers.companies ? {
+          id: t.users_transactions_receiver_idTousers.companies.id,
+          name: t.users_transactions_receiver_idTousers.companies.name,
+        } : null,
+      },
+    }));
+
+    return apiResponse(
+      transformedTransactions,
       200,
       request
     );

@@ -17,19 +17,28 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { transactionId } = generateQR2Schema.parse(body);
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transactions.findUnique({
       where: { id: transactionId },
       include: {
-        receiver: true,
-        company: true,
+        users_transactions_receiver_idTousers: true,
+        companies: true,
       },
     });
 
@@ -38,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is the receiver
-    if (transaction.receiverId !== user.id) {
+    if (transaction.receiver_id !== user.id) {
       return apiError('Unauthorized', 403, request);
     }
 
@@ -47,13 +56,18 @@ export async function POST(request: NextRequest) {
       return apiError('Invalid transaction status', 400, request);
     }
 
+    // VALIDATION: Ensure QR1 was generated before allowing QR2 generation
+    if (!transaction.qr1_generated_at) {
+      return apiError('QR1 must be generated before QR2', 400, request);
+    }
+
     // Generate QR2
     const qr2Data = {
       transactionId: transaction.id,
       type: 'qr2' as const,
       amount: Number(transaction.amount),
-      senderId: transaction.senderId,
-      receiverId: transaction.receiverId,
+      senderId: transaction.sender_id,
+      receiverId: transaction.receiver_id,
       timestamp: Date.now(),
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
       nonce: nanoid(16),
@@ -61,26 +75,26 @@ export async function POST(request: NextRequest) {
 
     const { qrCodeImage, encryptedData } = await QRService.generateQR(
       qr2Data,
-      transaction.encryptionKey!,
+      transaction.encryption_key!,
       transaction.iv!
     );
 
     // Update transaction with QR2
-    await prisma.transaction.update({
+    await prisma.transactions.update({
       where: { id: transaction.id },
       data: {
-        qr2Code: qrCodeImage,
-        qr2EncryptedData: encryptedData,
-        qr2GeneratedAt: new Date(),
-        qr2ExpiresAt: new Date(qr2Data.expiresAt),
+        qr2_code: qrCodeImage,
+        qr2_encrypted_data: encryptedData,
+        qr2_generated_at: new Date(),
+        qr2_expires_at: new Date(qr2Data.expiresAt),
         status: 'QR2_GENERATED',
       },
     });
 
     // Log the action
-    await prisma.transactionLog.create({
+    await prisma.transaction_logs.create({
       data: {
-        transactionId: transaction.id,
+        transaction_id: transaction.id,
         action: 'QR2_GENERATED',
         status: 'QR2_GENERATED',
         metadata: { generatedBy: user.id },
@@ -88,15 +102,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Notify sender
-    await prisma.notification.create({
+    await prisma.notifications.create({
       data: {
-        userId: transaction.senderId,
-        companyId: transaction.companyId,
+        user_id: transaction.sender_id,
+        company_id: transaction.company_id,
         title: 'QR2 Generated',
         message: 'Scan the QR2 code to continue',
         type: 'TRANSACTION',
         priority: 'HIGH',
-        actionUrl: `/transactions/${transaction.id}`,
+        action_url: `/transactions/${transaction.id}`,
       },
     });
 
@@ -104,7 +118,7 @@ export async function POST(request: NextRequest) {
       {
         transaction: {
           id: transaction.id,
-          transactionNumber: transaction.transactionNumber,
+          transactionNumber: transaction.transaction_number,
           qr2: {
             image: qrCodeImage,
             expiresAt: new Date(qr2Data.expiresAt).toISOString(),

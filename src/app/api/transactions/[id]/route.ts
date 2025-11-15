@@ -13,39 +13,47 @@ export async function GET(
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const { id } = params;
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transactions.findUnique({
       where: { id },
       include: {
-        sender: {
+        users_transactions_sender_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
-            imageUrl: true,
           },
         },
-        receiver: {
+        users_transactions_receiver_idTousers: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
+            first_name: true,
+            last_name: true,
             email: true,
             phone: true,
-            imageUrl: true,
           },
         },
-        company: true,
-        logs: {
-          orderBy: { createdAt: 'desc' },
+        companies: true,
+        transaction_logs: {
+          orderBy: { created_at: 'desc' },
+          take: 10,
         },
       },
     });
@@ -56,9 +64,8 @@ export async function GET(
 
     // Verify user has access
     if (
-      transaction.senderId !== user.id &&
-      transaction.receiverId !== user.id &&
-      !await ClerkService.isSuperAdmin()
+      transaction.sender_id !== user.id &&
+      transaction.receiver_id !== user.id
     ) {
       return apiError('Unauthorized', 403, request);
     }
@@ -79,16 +86,25 @@ export async function PATCH(
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const { id } = params;
     const body = await request.json();
     const { action } = body;
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transactions.findUnique({
       where: { id },
     });
 
@@ -97,7 +113,7 @@ export async function PATCH(
     }
 
     // Only sender can cancel
-    if (transaction.senderId !== user.id) {
+    if (transaction.sender_id !== user.id) {
       return apiError('Unauthorized', 403, request);
     }
 
@@ -107,7 +123,7 @@ export async function PATCH(
         return apiError('Cannot cancel completed transaction', 400, request);
       }
 
-      await prisma.transaction.update({
+      await prisma.transactions.update({
         where: { id },
         data: {
           status: 'CANCELLED',
@@ -115,9 +131,9 @@ export async function PATCH(
       });
 
       // Log the action
-      await prisma.transactionLog.create({
+      await prisma.transaction_logs.create({
         data: {
-          transactionId: id,
+          transaction_id: id,
           action: 'CANCELLED',
           status: 'CANCELLED',
           metadata: { cancelledBy: user.id },
@@ -125,13 +141,13 @@ export async function PATCH(
       });
 
       // Notify receiver if applicable
-      if (transaction.receiverId) {
-        await prisma.notification.create({
+      if (transaction.receiver_id) {
+        await prisma.notifications.create({
           data: {
-            userId: transaction.receiverId,
-            companyId: transaction.companyId,
+            user_id: transaction.receiver_id,
+            company_id: transaction.company_id,
             title: 'Transaction Cancelled',
-            message: `Transaction ${transaction.transactionNumber} has been cancelled`,
+            message: `Transaction ${transaction.transaction_number} has been cancelled`,
             type: 'TRANSACTION',
             priority: 'NORMAL',
           },

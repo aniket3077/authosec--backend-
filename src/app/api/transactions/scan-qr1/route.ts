@@ -17,23 +17,32 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { qrCode } = scanQR1Schema.parse(body);
 
     // Find transaction by encrypted QR1 data
-    const transaction = await prisma.transaction.findFirst({
+    const transaction = await prisma.transactions.findFirst({
       where: {
-        qr1EncryptedData: qrCode,
-        status: 'QR1_SCANNED',
+        qr1_encrypted_data: qrCode,
+        status: 'INITIATED',
       },
       include: {
-        sender: true,
-        company: true,
+        users_transactions_sender_idTousers: true,
+        companies: true,
       },
     });
 
@@ -42,19 +51,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is the receiver
-    if (transaction.receiverId !== user.id) {
+    if (transaction.receiver_id !== user.id) {
       return apiError('Unauthorized to scan this QR code', 403, request);
     }
 
     // Decrypt and validate QR1
     const qrData = await QRService.validateQR(
       qrCode,
-      transaction.encryptionKey!,
+      transaction.encryption_key!,
       transaction.iv!
     );
 
     if (QRService.isExpired(qrData)) {
-      await prisma.transaction.update({
+      await prisma.transactions.update({
         where: { id: transaction.id },
         data: { status: 'FAILED' },
       });
@@ -62,15 +71,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Update transaction status
-    await prisma.transaction.update({
+    await prisma.transactions.update({
       where: { id: transaction.id },
       data: { status: 'QR1_SCANNED' },
     });
 
     // Log the action
-    await prisma.transactionLog.create({
+    await prisma.transaction_logs.create({
       data: {
-        transactionId: transaction.id,
+        transaction_id: transaction.id,
         action: 'QR1_SCANNED',
         status: 'QR1_SCANNED',
         metadata: { scannedBy: user.id },
@@ -78,15 +87,15 @@ export async function POST(request: NextRequest) {
     });
 
     // Notify sender
-    await prisma.notification.create({
+    await prisma.notifications.create({
       data: {
-        userId: transaction.senderId,
-        companyId: transaction.companyId,
+        user_id: transaction.sender_id,
+        company_id: transaction.company_id,
         title: 'QR Code Scanned',
-        message: `${user.firstName || 'Receiver'} has scanned your QR code`,
+        message: `${user.first_name || 'Receiver'} has scanned your QR code`,
         type: 'TRANSACTION',
         priority: 'NORMAL',
-        actionUrl: `/transactions/${transaction.id}`,
+        action_url: `/transactions/${transaction.id}`,
       },
     });
 
@@ -94,13 +103,13 @@ export async function POST(request: NextRequest) {
       {
         transaction: {
           id: transaction.id,
-          transactionNumber: transaction.transactionNumber,
+          transactionNumber: transaction.transaction_number,
           amount: transaction.amount,
           currency: transaction.currency,
           description: transaction.description,
           sender: {
-            name: `${transaction.sender.firstName} ${transaction.sender.lastName}`,
-            company: transaction.company?.name,
+            name: `${transaction.users_transactions_sender_idTousers.first_name} ${transaction.users_transactions_sender_idTousers.last_name}`,
+            company: transaction.companies?.name,
           },
           status: 'QR1_SCANNED',
         },

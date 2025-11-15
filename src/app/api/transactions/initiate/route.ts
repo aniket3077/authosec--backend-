@@ -21,18 +21,27 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { receiverPhone, amount, currency, description } = initiateSchema.parse(body);
 
     // Find receiver by phone
-    const receiver = await prisma.user.findUnique({
+    const receiver = await prisma.users.findUnique({
       where: { phone: receiverPhone },
-      select: { id: true, companyId: true },
+      select: { id: true, company_id: true },
     });
 
     if (!receiver) {
@@ -45,19 +54,19 @@ export async function POST(request: NextRequest) {
     const transactionNumber = `TXN${nanoid(10).toUpperCase()}`;
 
     // Create transaction
-    const transaction = await prisma.transaction.create({
+    const transaction = await prisma.transactions.create({
       data: {
-        transactionNumber,
-        senderId: user.id,
-        companyId: user.companyId,
-        receiverId: receiver.id,
+        transaction_number: transactionNumber,
+        sender_id: user.id,
+        company_id: user.company_id,
+        receiver_id: receiver.id,
         amount,
         currency,
         description,
         status: 'INITIATED',
-        encryptionKey: encryptionKey.substring(0, 16),
+        encryption_key: encryptionKey.substring(0, 16),
         iv,
-        otpAttempts: 0,
+        otp_attempts: 0,
       },
     });
 
@@ -80,26 +89,26 @@ export async function POST(request: NextRequest) {
     );
 
     // Update transaction with QR1
-    await prisma.transaction.update({
+    await prisma.transactions.update({
       where: { id: transaction.id },
       data: {
-        qr1Code: qrCodeImage,
-        qr1EncryptedData: encryptedData,
-        qr1GeneratedAt: new Date(),
-        qr1ExpiresAt: new Date(qr1Data.expiresAt),
+        qr1_code: qrCodeImage,
+        qr1_encrypted_data: encryptedData,
+        qr1_generated_at: new Date(),
+        qr1_expires_at: new Date(qr1Data.expiresAt),
       },
     });
 
     // Create notification for receiver
-    await prisma.notification.create({
+    await prisma.notifications.create({
       data: {
-        userId: receiver.id,
-        companyId: receiver.companyId,
+        user_id: receiver.id,
+        company_id: receiver.company_id,
         title: 'New Transaction Request',
         message: `You have a new transaction request for ${currency} ${amount}`,
         type: 'TRANSACTION',
         priority: 'HIGH',
-        actionUrl: `/transactions/${transaction.id}`,
+        action_url: `/transactions/${transaction.id}`,
       },
     });
 
@@ -107,7 +116,7 @@ export async function POST(request: NextRequest) {
       {
         transaction: {
           id: transaction.id,
-          transactionNumber: transactionNumber,
+          transactionNumber: transaction.transaction_number,
           amount,
           currency,
           status: 'INITIATED',

@@ -16,23 +16,32 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { qrCode } = scanQR2Schema.parse(body);
 
     // Find transaction by encrypted QR2 data
-    const transaction = await prisma.transaction.findFirst({
+    const transaction = await prisma.transactions.findFirst({
       where: {
-        qr2EncryptedData: qrCode,
+        qr2_encrypted_data: qrCode,
         status: 'QR2_GENERATED',
       },
       include: {
-        receiver: true,
-        company: true,
+        users_transactions_receiver_idTousers: true,
+        companies: true,
       },
     });
 
@@ -41,19 +50,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is the sender
-    if (transaction.senderId !== user.id) {
+    if (transaction.sender_id !== user.id) {
       return apiError('Unauthorized to scan this QR code', 403, request);
     }
 
     // Decrypt and validate QR2
     const qrData = await QRService.validateQR(
       qrCode,
-      transaction.encryptionKey!,
+      transaction.encryption_key!,
       transaction.iv!
     );
 
     if (QRService.isExpired(qrData)) {
-      await prisma.transaction.update({
+      await prisma.transactions.update({
         where: { id: transaction.id },
         data: { status: 'FAILED' },
       });
@@ -61,15 +70,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Update transaction status
-    await prisma.transaction.update({
+    await prisma.transactions.update({
       where: { id: transaction.id },
       data: { status: 'QR2_SCANNED' },
     });
 
     // Log the action
-    await prisma.transactionLog.create({
+    await prisma.transaction_logs.create({
       data: {
-        transactionId: transaction.id,
+        transaction_id: transaction.id,
         action: 'QR2_SCANNED',
         status: 'QR2_SCANNED',
         metadata: { scannedBy: user.id },
@@ -80,7 +89,7 @@ export async function POST(request: NextRequest) {
       {
         transaction: {
           id: transaction.id,
-          transactionNumber: transaction.transactionNumber,
+          transactionNumber: transaction.transaction_number,
           amount: transaction.amount,
           currency: transaction.currency,
           status: 'QR2_SCANNED',

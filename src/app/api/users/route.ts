@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const skip = (page - 1) * limit;
 
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
+      prisma.users.findMany({
         skip,
         take: limit,
         include: {
@@ -33,9 +33,9 @@ export async function GET(request: NextRequest) {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { created_at: 'desc' },
       }),
-      prisma.user.count(),
+      prisma.users.count(),
     ]);
 
     return apiResponse(
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     const validatedData = userSchema.parse(body);
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.users.findUnique({
       where: { email: validatedData.email },
     });
 
@@ -78,8 +78,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user
-    const user = await prisma.user.create({
-      data: validatedData,
+    const user = await prisma.users.create({
+      data: {
+        ...validatedData,
+        updated_at: new Date(),
+      },
     });
 
     return apiResponse(user, 201, request);

@@ -20,11 +20,20 @@ export async function GET(
   try {
     const { id } = await params;
     
-    const user = await prisma.user.findUnique({
+    const user = await prisma.users.findUnique({
       where: { id },
       include: {
-        posts: {
-          orderBy: { createdAt: 'desc' },
+        companies: true,
+        notifications: {
+          orderBy: { created_at: 'desc' },
+          take: 10,
+        },
+        _count: {
+          select: {
+            transactions_transactions_sender_idTousers: true,
+            transactions_transactions_receiver_idTousers: true,
+            notifications: true,
+          },
         },
       },
     });
@@ -54,9 +63,12 @@ export async function PUT(
     
     const validatedData = updateUserSchema.parse(body);
 
-    const user = await prisma.user.update({
+    const user = await prisma.users.update({
       where: { id },
-      data: validatedData,
+      data: {
+        ...validatedData,
+        updated_at: new Date(),
+      },
     });
 
     return apiResponse(user, 200, request);
@@ -80,7 +92,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     
-    await prisma.user.delete({
+    await prisma.users.delete({
       where: { id },
     });
 

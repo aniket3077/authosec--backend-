@@ -16,15 +16,24 @@ export async function POST(request: NextRequest) {
   if (corsResponse) return corsResponse;
 
   try {
-    const user = await ClerkService.getCurrentUser();
+    // Get Firebase token from Authorization header
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return apiError('Unauthorized - No token provided', 401, request);
+    }
+
+    const token = authHeader.split('Bearer ')[1];
+    const decodedToken = await verifyFirebaseToken(token);
+    const user = await getUserByFirebaseUid(decodedToken.uid);
+
     if (!user) {
-      return apiError('Unauthorized', 401, request);
+      return apiError('User not found', 404, request);
     }
 
     const body = await request.json();
     const { transactionId } = sendOTPSchema.parse(body);
 
-    const transaction = await prisma.transaction.findUnique({
+    const transaction = await prisma.transactions.findUnique({
       where: { id: transactionId },
     });
 
@@ -33,13 +42,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Verify user is the sender
-    if (transaction.senderId !== user.id) {
+    if (transaction.sender_id !== user.id) {
       return apiError('Unauthorized', 403, request);
     }
 
     // Verify status
     if (transaction.status !== 'QR2_SCANNED') {
       return apiError('Invalid transaction status', 400, request);
+    }
+
+    // VALIDATION: Ensure QR2 was generated and scanned before sending OTP
+    if (!transaction.qr2_generated_at) {
+      return apiError('QR2 must be generated before sending OTP', 400, request);
     }
 
     if (!user.phone) {
@@ -54,18 +68,18 @@ export async function POST(request: NextRequest) {
     );
 
     // Update transaction
-    await prisma.transaction.update({
+    await prisma.transactions.update({
       where: { id: transactionId },
       data: {
         status: 'OTP_SENT',
-        otpSentAt: new Date(),
+        otp_sent_at: new Date(),
       },
     });
 
     // Log the action
-    await prisma.transactionLog.create({
+    await prisma.transaction_logs.create({
       data: {
-        transactionId: transaction.id,
+        transaction_id: transaction.id,
         action: 'OTP_SENT',
         status: 'OTP_SENT',
         metadata: { sentTo: user.phone },

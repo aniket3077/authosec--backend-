@@ -19,14 +19,14 @@ export async function GET(request: NextRequest) {
     const token = authHeader.split('Bearer ')[1];
     const decodedToken = await verifyFirebaseToken(token);
 
-    const profile = await prisma.user.findUnique({
-      where: { firebaseUid: decodedToken.uid },
+    const profile = await prisma.users.findUnique({
+      where: { firebase_uid: decodedToken.uid },
       include: {
-        company: true,
+        companies: true,
         _count: {
           select: {
-            sentTransactions: true,
-            receivedTransactions: true,
+            transactions_transactions_sender_idTousers: true,
+            transactions_transactions_receiver_idTousers: true,
             notifications: true,
           },
         },
@@ -37,8 +37,32 @@ export async function GET(request: NextRequest) {
       return apiError('User not found in database. Please sync your account.', 404, request);
     }
 
-    // Return profile directly in data field (not nested)
-    return apiResponse(profile, 200, request);
+    // Transform snake_case to camelCase for frontend
+    const userProfile = {
+      id: profile.id,
+      email: profile.email,
+      firstName: profile.first_name,
+      lastName: profile.last_name,
+      phone: profile.phone,
+      role: profile.role,
+      companyId: profile.company_id,
+      isActive: profile.is_active,
+      firebaseUid: profile.firebase_uid,
+      imageUrl: profile.image_url,
+      department: profile.department,
+      position: profile.position,
+      lastLogin: profile.last_login,
+      createdAt: profile.created_at,
+      updatedAt: profile.updated_at,
+      company: profile.companies,
+      transactionCount: {
+        sent: profile._count.transactions_transactions_sender_idTousers,
+        received: profile._count.transactions_transactions_receiver_idTousers,
+        notifications: profile._count.notifications,
+      },
+    };
+
+    return apiResponse(userProfile, 200, request);
   } catch (error: any) {
     console.error('Get profile error:', error);
     return apiError(error.message || 'Failed to fetch profile', 500, request);
@@ -63,12 +87,13 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { firstName, lastName, phone } = body;
 
-    const updatedUser = await prisma.user.update({
-      where: { firebaseUid: decodedToken.uid },
+    const updatedUser = await prisma.users.update({
+      where: { firebase_uid: decodedToken.uid },
       data: {
-        firstName,
-        lastName,
+        first_name: firstName,
+        last_name: lastName,
         phone,
+        updated_at: new Date(),
       },
     });
 
