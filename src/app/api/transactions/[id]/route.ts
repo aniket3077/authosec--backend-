@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 // GET /api/transactions/[id]
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -27,7 +27,7 @@ export async function GET(
       return apiError('User not found', 404, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const transaction = await prisma.transactions.findUnique({
       where: { id },
@@ -80,7 +80,7 @@ export async function GET(
 // PATCH /api/transactions/[id] - Cancel transaction
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -100,7 +100,7 @@ export async function PATCH(
       return apiError('User not found', 404, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { action } = body;
 

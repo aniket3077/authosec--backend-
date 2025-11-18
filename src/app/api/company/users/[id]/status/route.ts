@@ -11,7 +11,7 @@ import { auth } from '@/lib/firebase-admin';
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -39,6 +39,8 @@ export async function PATCH(
     if (typeof isActive !== 'boolean') {
       return apiError('isActive must be a boolean', 400, request);
     }
+
+    const { id } = await params;
 
     // Get the target user
     const targetUser = await prisma.user.findUnique({

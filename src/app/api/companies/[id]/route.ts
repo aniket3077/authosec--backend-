@@ -18,7 +18,7 @@ const updateCompanySchema = z.object({
 // GET /api/companies/[id]
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -29,7 +29,7 @@ export async function GET(
       return apiError('Unauthorized', 401, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const company = await prisma.company.findUnique({
       where: { id },
@@ -74,7 +74,7 @@ export async function GET(
 // PUT /api/companies/[id]
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -85,7 +85,7 @@ export async function PUT(
       return apiError('Unauthorized', 401, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     // Verify access
     const isSuperAdmin = await ClerkService.isSuperAdmin();
@@ -143,7 +143,7 @@ export async function PUT(
 // DELETE /api/companies/[id]
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -159,7 +159,7 @@ export async function DELETE(
       return apiError('Insufficient permissions', 403, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const company = await prisma.company.findUnique({
       where: { id },

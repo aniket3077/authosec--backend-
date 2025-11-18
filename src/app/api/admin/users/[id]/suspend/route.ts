@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 // POST /api/admin/users/[id]/suspend
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -23,7 +23,7 @@ export async function POST(
       return apiError('Insufficient permissions', 403, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const targetUser = await prisma.user.findUnique({
       where: { id },

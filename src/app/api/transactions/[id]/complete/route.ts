@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 // POST /api/transactions/[id]/complete
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
@@ -28,7 +28,7 @@ export async function POST(
       return apiError('User not found', 404, request);
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const transaction = await prisma.transactions.findUnique({
       where: { id },

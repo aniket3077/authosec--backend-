@@ -12,7 +12,8 @@ const initiateSchema = z.object({
   receiverPhone: z.string().regex(/^\+[1-9]\d{1,14}$/),
   amount: z.number().positive(),
   currency: z.string().default('INR'),
-  description: z.string().optional()
+  description: z.string().optional(),
+  companyId: z.string().optional() // Optional company ID override
 });
 
 // POST /api/transactions/initiate
@@ -36,7 +37,14 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { receiverPhone, amount, currency, description } = initiateSchema.parse(body);
+    const { receiverPhone, amount, currency, description, companyId } = initiateSchema.parse(body);
+
+    // Use provided companyId or fall back to user's company_id
+    const transactionCompanyId = companyId || user.company_id;
+
+    if (!transactionCompanyId) {
+      return apiError('Company ID is required. User must be associated with a company or provide companyId.', 400, request);
+    }
 
     // Find receiver by phone
     const receiver = await prisma.users.findUnique({
@@ -58,7 +66,7 @@ export async function POST(request: NextRequest) {
       data: {
         transaction_number: transactionNumber,
         sender_id: user.id,
-        company_id: user.company_id,
+        company_id: transactionCompanyId,
         receiver_id: receiver.id,
         amount,
         currency,
